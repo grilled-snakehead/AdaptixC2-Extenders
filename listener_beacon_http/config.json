@@ -64,11 +64,11 @@
               },
               {
                 "type": "label",
-                "text": "URI:",
+                "text": "URIs:",
                 "position": [ 3, 0, 1, 1 ]
               },
               {
-                "type": "input",
+                "type": "textedit",
                 "id": "uris",
                 "placeholder": "/index.php",
                 "position": [ 3, 1, 1, 2 ]

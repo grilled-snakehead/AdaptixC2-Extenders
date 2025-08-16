@@ -75,9 +75,10 @@ func (handler *HTTP) Start(ts Teamserver) error {
 		c.Next()
 	})
 
-	if handler.Config.HttpMethod == "POST" {
+	switch handler.Config.HttpMethod {
+	case "POST":
 		router.POST("/*endpoint", handler.processRequest)
-	} else if handler.Config.HttpMethod == "GET" {
+	case "GET":
 		router.GET("/*endpoint", handler.processRequest)
 	}
 
@@ -189,7 +190,7 @@ func (handler *HTTP) processRequest(ctx *gin.Context) {
 		}
 	}
 
-	if valid == false {
+	if !valid {
 		handler.pageError(ctx)
 		return
 	}

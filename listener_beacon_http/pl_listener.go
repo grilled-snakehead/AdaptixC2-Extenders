@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Adaptix-Framework/axc2"
+	adaptix "github.com/Adaptix-Framework/axc2"
 	"github.com/gin-gonic/gin"
 )
 
@@ -49,33 +49,36 @@ func (m *ModuleExtender) HandlerListenerValid(data string) error {
 
 		host, portStr, err := net.SplitHostPort(line)
 		if err != nil {
-			return fmt.Errorf("Invalid address (cannot split host:port): %s\n", line)
+			return fmt.Errorf("invalid address (cannot split host:port): %s", line)
 		}
 
 		port, err := strconv.Atoi(portStr)
 		if err != nil || port < 1 || port > 65535 {
-			return fmt.Errorf("Invalid port: %s\n", line)
+			return fmt.Errorf("invalid port: %s", line)
 		}
 
 		ip := net.ParseIP(host)
 		if ip == nil {
 			if len(host) == 0 || len(host) > 253 {
-				return fmt.Errorf("Invalid host: %s\n", line)
+				return fmt.Errorf("invalid host: %s", line)
 			}
 			parts := strings.Split(host, ".")
 			for _, part := range parts {
 				if len(part) == 0 || len(part) > 63 {
-					return fmt.Errorf("Invalid host: %s\n", line)
+					return fmt.Errorf("invalid host: %s", line)
 				}
 			}
 		}
 	}
 
 	uriPattern := `^/[a-zA-Z0-9\.\=\-]+(/[a-zA-Z0-9\.\=\-]+)*$`
-	for _, uri := range strings.Split(conf.Uris, "\n") {
-		matched, err := regexp.MatchString(uriPattern, uri)
-		if err != nil || !matched {
-			return errors.New(fmt.Sprintf("uri %s invalid", uri))
+	regexpObj, _ := regexp.Compile(uriPattern)
+
+	uris := normalizeConfigs(conf.Uris)
+
+	for uri := range strings.SplitSeq(uris, ", ") {
+		if matched := regexpObj.MatchString(uri); !matched {
+			return fmt.Errorf("uri %s invalid", uri)
 		}
 	}
 
